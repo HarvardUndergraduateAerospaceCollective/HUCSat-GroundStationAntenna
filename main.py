@@ -1,5 +1,6 @@
 # Imports
 import socket
+import subprocess
 import time
 from skyfield.api import load, wgs84
 
@@ -11,6 +12,12 @@ OBSERVER_ELEV_M = 10
 ROTCTLD_HOST = "100.103.23.51"
 ROTCTLD_PORT = 4533
 UPDATE_INTERVAL = 2
+
+# Rotator hardware config (per HUCSat docs)
+# Model: 601=az+el, 609=az only, 610=el only
+ROTCTLD_MODEL = 601
+ROTCTLD_SERIAL_PORT = "/dev/ttyACM0"
+ROTCTLD_BAUD = 9600
 
 
 # Load TLE + satellite
@@ -33,8 +40,18 @@ def send_rotator(az, el):
         print("Hamlib send error:", e)
 
 
+# Grant serial port access and start rotctld server
+subprocess.run(["sudo", "chmod", "666", ROTCTLD_SERIAL_PORT], check=True)
+rotctld_proc = subprocess.Popen([
+    "rotctld",
+    "-m", str(ROTCTLD_MODEL),
+    "-r", ROTCTLD_SERIAL_PORT,
+    "-s", str(ROTCTLD_BAUD),
+    "-t", str(ROTCTLD_PORT),
+])
+print(f"rotctld started (PID {rotctld_proc.pid}), waiting for it to be ready...")
+
 # Wait for rotctld to be ready before tracking
-print(f"Waiting for rotctld at {ROTCTLD_HOST}:{ROTCTLD_PORT}...")
 while True:
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -47,17 +64,21 @@ while True:
 
 
 # Main loop
-while True:
-    t = ts.now()
-    difference = sat - observer
-    topocentric = difference.at(t)
-    alt, az, distance = topocentric.altaz()
-    az_deg = az.degrees
-    el_deg = alt.degrees
-    # Only track when above horizon
-    if el_deg > 0:
-        send_rotator(az_deg, el_deg)
-        print(f"AZ: {az_deg:.2f}  EL: {el_deg:.2f}")
-    else:
-        print("Satellite below horizon")
-    time.sleep(UPDATE_INTERVAL)
+try:
+    while True:
+        t = ts.now()
+        difference = sat - observer
+        topocentric = difference.at(t)
+        alt, az, distance = topocentric.altaz()
+        az_deg = az.degrees
+        el_deg = alt.degrees
+        # Only track when above horizon
+        if el_deg > 0:
+            send_rotator(az_deg, el_deg)
+            print(f"AZ: {az_deg:.2f}  EL: {el_deg:.2f}")
+        else:
+            print("Satellite below horizon")
+        time.sleep(UPDATE_INTERVAL)
+finally:
+    rotctld_proc.terminate()
+    print("rotctld stopped.")
