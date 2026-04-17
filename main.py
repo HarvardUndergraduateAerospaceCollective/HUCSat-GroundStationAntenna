@@ -26,19 +26,6 @@ cat_nr = 57448  # replace with ACS-3 NORAD ID
 url = f"https://celestrak.org/NORAD/elements/gp.php?CATNR={cat_nr}&FORMAT=TLE"
 sat = load.tle_file(url)[0]
 observer = wgs84.latlon(OBSERVER_LAT, OBSERVER_LON, elevation_m=OBSERVER_ELEV_M)
-print(f"Tracking: {sat.name}")
-
-# Find and print next pass over observer within 24 hours
-t0 = ts.now()
-t1 = ts.tt_jd(t0.tt + 1)
-times, events = sat.find_events(observer, t0, t1, altitude_degrees=0.0)
-event_names = ["rise", "culminate", "set"]
-if len(times) == 0:
-    print("No passes found in the next 24 hours.")
-else:
-    print("Next passes (UTC):")
-    for ti, event in zip(times, events):
-        print(f"  {event_names[event]:10s} {ti.utc_strftime('%Y-%m-%d %H:%M:%S')}")
 
 
 # Hamlib send command
