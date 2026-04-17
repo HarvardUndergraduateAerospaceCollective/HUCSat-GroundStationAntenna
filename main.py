@@ -72,10 +72,10 @@ try:
         alt, az, distance = topocentric.altaz()
         az_deg = az.degrees
         el_deg = alt.degrees
+        print(f"AZ: {az_deg:.2f}  EL: {el_deg:.2f}")
         # Only track when above horizon
         if el_deg > 0:
             send_rotator(az_deg, el_deg)
-            print(f"AZ: {az_deg:.2f}  EL: {el_deg:.2f}")
         else:
             print("Satellite below horizon")
         time.sleep(UPDATE_INTERVAL)
