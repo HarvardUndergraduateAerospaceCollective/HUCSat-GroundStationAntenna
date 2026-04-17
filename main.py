@@ -33,6 +33,19 @@ def send_rotator(az, el):
         print("Hamlib send error:", e)
 
 
+# Wait for rotctld to be ready before tracking
+print(f"Waiting for rotctld at {ROTCTLD_HOST}:{ROTCTLD_PORT}...")
+while True:
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.settimeout(2)
+            s.connect((ROTCTLD_HOST, ROTCTLD_PORT))
+        print("rotctld connected.")
+        break
+    except Exception:
+        time.sleep(2)
+
+
 # Main loop
 while True:
     t = ts.now()
