@@ -5,23 +5,19 @@ from skyfield.api import load, wgs84
 
 
 # Config
-SATELLITE_NAME = "ACS3"
-TLE_URL = "https://celestrak.org/NORAD/elements/weather.txt"
 OBSERVER_LAT = 42.3770
 OBSERVER_LON = -71.1167
 OBSERVER_ELEV_M = 10
 ROTCTLD_HOST = "100.103.23.51"
 ROTCTLD_PORT = 4533
-UPDATE_INTERVAL = 10
+UPDATE_INTERVAL = 2
 
 
 # Load TLE + satellite
 ts = load.timescale()
-satellites = load.tle_file(TLE_URL)
-by_name = {sat.name: sat for sat in satellites}
-if SATELLITE_NAME not in by_name:
-    raise ValueError(f"Satellite '{SATELLITE_NAME}' not found in TLE set.")
-sat = by_name[SATELLITE_NAME]
+cat_nr = 59588  # replace with ACS-3 NORAD ID
+url = f"https://celestrak.org/NORAD/elements/gp.php?CATNR={cat_nr}&FORMAT=TLE"
+sat = load.tle_file(url)[0]
 observer = wgs84.latlon(OBSERVER_LAT, OBSERVER_LON, elevation_m=OBSERVER_ELEV_M)
 
 
@@ -38,7 +34,6 @@ def send_rotator(az, el):
 
 
 # Main loop
-print(f"Tracking satellite: {SATELLITE_NAME}")
 while True:
     t = ts.now()
     difference = sat - observer
