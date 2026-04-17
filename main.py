@@ -22,7 +22,7 @@ ROTCTLD_BAUD = 9600
 
 # Load TLE + satellite
 ts = load.timescale()
-cat_nr = 59588  # replace with ACS-3 NORAD ID
+cat_nr = 57448  # replace with ACS-3 NORAD ID
 url = f"https://celestrak.org/NORAD/elements/gp.php?CATNR={cat_nr}&FORMAT=TLE"
 sat = load.tle_file(url)[0]
 observer = wgs84.latlon(OBSERVER_LAT, OBSERVER_LON, elevation_m=OBSERVER_ELEV_M)
