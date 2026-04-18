@@ -28,9 +28,6 @@ url = f"https://celestrak.org/NORAD/elements/gp.php?CATNR={cat_nr}&FORMAT=TLE"
 sat = load.tle_file(url, reload=True)[0]  # reload=True forces fresh TLE every run
 observer = wgs84.latlon(OBSERVER_LAT, OBSERVER_LON, elevation_m=OBSERVER_ELEV_M)
 
-if "ACS3" not in sat.name.upper().replace("-", "").replace(" ", ""):
-    print(f"WARNING: expected ACS-3 but got '{sat.name}' — check CATNR!")
-
 # --- Diagnostics ---
 t_now = ts.now()
 last_tle_refresh = t_now
