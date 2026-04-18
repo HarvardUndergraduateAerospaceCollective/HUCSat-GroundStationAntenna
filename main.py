@@ -23,7 +23,7 @@ ROTCTLD_BAUD = 9600
 
 # Load TLE + satellite
 ts = load.timescale()
-cat_nr = 59588  # ACS-3 (Advanced Composite Solar Sail System)
+cat_nr = 53494  # norad id
 url = f"https://celestrak.org/NORAD/elements/gp.php?CATNR={cat_nr}&FORMAT=TLE"
 sat = load.tle_file(url, reload=True)[0]  # reload=True forces fresh TLE every run
 observer = wgs84.latlon(OBSERVER_LAT, OBSERVER_LON, elevation_m=OBSERVER_ELEV_M)
