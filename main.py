@@ -6,12 +6,13 @@ from skyfield.api import load, wgs84
 
 
 # Config
-OBSERVER_LAT = 42.3770
-OBSERVER_LON = -71.1167
+OBSERVER_LAT = 42.3631
+OBSERVER_LON = -71.1260
 OBSERVER_ELEV_M = 10
 ROTCTLD_HOST = "100.103.23.51"
 ROTCTLD_PORT = 4533
 UPDATE_INTERVAL = 2
+TLE_REFRESH_HOURS = 6
 
 # Rotator hardware config (per HUCSat docs)
 # Model: 601=az+el, 609=az only, 610=el only
@@ -22,10 +23,41 @@ ROTCTLD_BAUD = 9600
 
 # Load TLE + satellite
 ts = load.timescale()
-cat_nr = 57448  # replace with ACS-3 NORAD ID
+cat_nr = 59588  # ACS-3 (Advanced Composite Solar Sail System)
 url = f"https://celestrak.org/NORAD/elements/gp.php?CATNR={cat_nr}&FORMAT=TLE"
-sat = load.tle_file(url)[0]
+sat = load.tle_file(url, reload=True)[0]  # reload=True forces fresh TLE every run
 observer = wgs84.latlon(OBSERVER_LAT, OBSERVER_LON, elevation_m=OBSERVER_ELEV_M)
+
+if "ACS3" not in sat.name.upper().replace("-", "").replace(" ", ""):
+    print(f"WARNING: expected ACS-3 but got '{sat.name}' — check CATNR!")
+
+# --- Diagnostics ---
+t_now = ts.now()
+last_tle_refresh = t_now
+epoch_age_days = t_now.tt - sat.epoch.tt
+print(f"Tracking: {sat.name}")
+print(f"TLE epoch age: {epoch_age_days:.1f} days{'  WARNING: stale, positions unreliable!' if epoch_age_days > 3 else ''}")
+
+# Ground track sanity check: LEO alt should be ~400-2000 km; garbage = stale/wrong TLE
+geocentric = sat.at(t_now)
+if geocentric.message:
+    print(f"TLE propagation error: {geocentric.message}")
+else:
+    subpoint = wgs84.subpoint_of(geocentric)
+    print(f"Satellite ground track: lat={subpoint.latitude.degrees:.2f}°  "
+          f"lon={subpoint.longitude.degrees:.2f}°  "
+          f"alt={subpoint.elevation.km:.0f} km")
+
+# Next passes over observer in 24 hours
+t1 = ts.tt_jd(t_now.tt + 1)
+times, events = sat.find_events(observer, t_now, t1, altitude_degrees=0.0)
+event_names = ["rise", "culminate", "set"]
+if len(times) == 0:
+    print("No passes in next 24 hours.")
+else:
+    print("Upcoming passes (UTC):")
+    for ti, ev in zip(times, events):
+        print(f"  {event_names[ev]:10s} {ti.utc_strftime('%Y-%m-%d %H:%M:%S')}")
 
 
 # Hamlib send command
@@ -67,6 +99,13 @@ while True:
 try:
     while True:
         t = ts.now()
+        if (t.tt - last_tle_refresh.tt) * 24 > TLE_REFRESH_HOURS:
+            try:
+                sat = load.tle_file(url, reload=True)[0]
+                last_tle_refresh = t
+                print(f"TLE refreshed: {sat.name}")
+            except Exception as e:
+                print("TLE refresh failed, using previous TLE:", e)
         difference = sat - observer
         topocentric = difference.at(t)
         alt, az, distance = topocentric.altaz()
