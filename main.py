@@ -2,7 +2,8 @@
 import socket
 import subprocess
 import time
-from skyfield.api import load, wgs84
+import urllib.request
+from skyfield.api import EarthSatellite, load, wgs84
 
 
 # Config
@@ -24,15 +25,30 @@ ROTCTLD_BAUD = 9600
 # Load TLE + satellite
 ts = load.timescale()
 cat_nr = 53494  # norad id
-url = f"https://celestrak.org/NORAD/elements/gp.php?CATNR={cat_nr}&FORMAT=TLE"
-sat = load.tle_file(url, reload=True)[0]  # reload=True forces fresh TLE every run
+
+
+def fetch_sat(catnr):
+    url = f"https://celestrak.org/NORAD/elements/gp.php?CATNR={catnr}&FORMAT=TLE"
+    req = urllib.request.Request(url, headers={"User-Agent": "HUCSat-GroundStation/1.0"})
+    with urllib.request.urlopen(req, timeout=30) as resp:
+        text = resp.read().decode("utf-8")
+    lines = [ln.strip() for ln in text.strip().splitlines() if ln.strip()]
+    if len(lines) < 3 or not lines[1].startswith("1 ") or not lines[2].startswith("2 "):
+        raise RuntimeError(f"Bad TLE response for CATNR={catnr}: {text!r}")
+    s = EarthSatellite(lines[1], lines[2], lines[0], ts)
+    if s.model.satnum != catnr:
+        raise RuntimeError(f"Celestrak returned satnum {s.model.satnum}, expected {catnr}")
+    return s
+
+
+sat = fetch_sat(cat_nr)
 observer = wgs84.latlon(OBSERVER_LAT, OBSERVER_LON, elevation_m=OBSERVER_ELEV_M)
 
 # --- Diagnostics ---
 t_now = ts.now()
 last_tle_refresh = t_now
 epoch_age_days = t_now.tt - sat.epoch.tt
-print(f"Tracking: {sat.name}")
+print(f"Tracking: {sat.name} (satnum {sat.model.satnum})")
 print(f"TLE epoch age: {epoch_age_days:.1f} days{'  WARNING: stale, positions unreliable!' if epoch_age_days > 3 else ''}")
 
 # Ground track sanity check: LEO alt should be ~400-2000 km; garbage = stale/wrong TLE
@@ -98,9 +114,9 @@ try:
         t = ts.now()
         if (t.tt - last_tle_refresh.tt) * 24 > TLE_REFRESH_HOURS:
             try:
-                sat = load.tle_file(url, reload=True)[0]
+                sat = fetch_sat(cat_nr)
                 last_tle_refresh = t
-                print(f"TLE refreshed: {sat.name}")
+                print(f"TLE refreshed: {sat.name} (satnum {sat.model.satnum})")
             except Exception as e:
                 print("TLE refresh failed, using previous TLE:", e)
         difference = sat - observer
