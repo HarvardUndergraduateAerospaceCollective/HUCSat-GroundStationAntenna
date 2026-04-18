@@ -24,7 +24,8 @@ ROTCTLD_BAUD = 9600
 
 # Load TLE + satellite
 ts = load.timescale()
-cat_nr = 53494  # norad id
+PROMPT_CAT_NR = True  # set True to enter NORAD ID at runtime
+cat_nr = int(input("Enter NORAD catalog number: ")) if PROMPT_CAT_NR else 53494
 
 
 def fetch_sat(catnr):
