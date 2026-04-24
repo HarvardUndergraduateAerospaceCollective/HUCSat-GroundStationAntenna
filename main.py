@@ -129,7 +129,7 @@ while True:
 # Tracking loop — runs in a daemon thread
 def tracking_loop():
     global sat, last_tle_refresh
-    while True:
+    while not emergency_stop.is_set():
         t = ts.now()
         if (t.tt - last_tle_refresh.tt) * 24 > TLE_REFRESH_HOURS:
             try:
@@ -149,7 +149,7 @@ def tracking_loop():
             send_rotator(az_deg, el_deg)
         else:
             print("Satellite below horizon")
-        time.sleep(UPDATE_INTERVAL)
+        emergency_stop.wait(timeout=UPDATE_INTERVAL)
 
 
 # Command listener — runs on the main thread
