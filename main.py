@@ -1,6 +1,8 @@
 # Imports
 import socket
 import subprocess
+import sys
+import threading
 import time
 import urllib.request
 from skyfield.api import EarthSatellite, load, wgs84
@@ -20,6 +22,9 @@ TLE_REFRESH_HOURS = 6
 ROTCTLD_MODEL = 601
 ROTCTLD_SERIAL_PORT = "/dev/ttyACM0"
 ROTCTLD_BAUD = 9600
+
+# Emergency stop event — set to halt rotator commands, clear to resume
+emergency_stop = threading.Event()
 
 
 # Load TLE + satellite
@@ -77,6 +82,8 @@ else:
 # Hamlib send command
 # P <azimuth> <elevation>
 def send_rotator(az, el):
+    if emergency_stop.is_set():
+        return
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.connect((ROTCTLD_HOST, ROTCTLD_PORT))
@@ -84,6 +91,16 @@ def send_rotator(az, el):
             s.sendall(cmd.encode("utf-8"))
     except Exception as e:
         print("Hamlib send error:", e)
+
+
+def send_stop_command():
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.connect((ROTCTLD_HOST, ROTCTLD_PORT))
+            s.sendall(b"S\n")
+        print("Emergency stop command sent to rotctld.")
+    except Exception as e:
+        print("Hamlib stop error:", e)
 
 
 # Grant serial port access and start rotctld server
@@ -109,8 +126,9 @@ while True:
         time.sleep(2)
 
 
-# Main loop
-try:
+# Tracking loop — runs in a daemon thread
+def tracking_loop():
+    global sat, last_tle_refresh
     while True:
         t = ts.now()
         if (t.tt - last_tle_refresh.tt) * 24 > TLE_REFRESH_HOURS:
@@ -132,6 +150,40 @@ try:
         else:
             print("Satellite below horizon")
         time.sleep(UPDATE_INTERVAL)
+
+
+# Command listener — runs on the main thread
+def command_listener():
+    print("Commands: [s]top - emergency stop | [r]esume - resume tracking | [q]uit - stop and exit")
+    while True:
+        try:
+            line = input().strip().lower()
+        except EOFError:
+            # stdin closed (e.g. running non-interactively); just block forever
+            threading.Event().wait()
+            return
+        if line in ("s", "stop"):
+            emergency_stop.set()
+            send_stop_command()
+            print("EMERGENCY STOP ACTIVATED")
+        elif line in ("r", "resume"):
+            emergency_stop.clear()
+            print("Tracking resumed")
+        elif line in ("q", "quit"):
+            emergency_stop.set()
+            send_stop_command()
+            raise SystemExit
+
+
+# Main entry point
+tracking_thread = threading.Thread(target=tracking_loop, daemon=True)
+tracking_thread.start()
+
+try:
+    command_listener()
+except (KeyboardInterrupt, SystemExit):
+    emergency_stop.set()
+    send_stop_command()
 finally:
     rotctld_proc.terminate()
     print("rotctld stopped.")
